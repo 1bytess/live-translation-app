@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Mic, Square, Play, Pause } from 'lucide-react';
+import { Mic, Square, Play, Pause, AlertCircle, X } from 'lucide-react';
 import { transcribeAudio, correctTranscript, translateText } from '../services/openai';
 
 interface AudioRecorderProps {
@@ -12,6 +12,7 @@ interface AudioRecorderProps {
 export default function AudioRecorder({ language, onNewTranscript, onAnalyserReady, onRecordingStateChange }: AudioRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const streamRef = useRef<MediaStream | null>(null);
@@ -19,7 +20,10 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
 
     const CHUNK_INTERVAL = 10000; // 10 seconds for "live" feel
 
+    const dismissError = () => setError(null);
+
     const startRecording = async () => {
+        setError(null);
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -54,7 +58,20 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
 
         } catch (err: any) {
             console.error("Error accessing microphone:", err);
-            alert(`Microphone access denied: ${err.message || err.name}. \n\nNote: If using --host, you must use HTTPS or access via localhost.`);
+
+            // Determine user-friendly error message
+            let errorMessage = "Unable to access microphone.";
+            if (err.name === 'NotFoundError' || err.message?.includes('not found')) {
+                errorMessage = "No microphone detected. Please connect a microphone and try again.";
+            } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                errorMessage = "Microphone access denied. Please allow microphone access in your browser settings.";
+            } else if (err.name === 'NotReadableError') {
+                errorMessage = "Microphone is in use by another application.";
+            } else if (err.message) {
+                errorMessage = `Microphone error: ${err.message}`;
+            }
+
+            setError(errorMessage);
         }
     };
 
@@ -110,24 +127,71 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
     };
 
     return (
-        <div className="flex gap-4 justify-center" style={{ position: 'relative', zIndex: 60 }}>
-            {!isRecording ? (
-                <button className="glass-button" onClick={startRecording}>
-                    <Mic size={20} />
-                    Start Recording
-                </button>
-            ) : (
-                <>
-                    <button className="glass-button danger" onClick={stopRecording}>
-                        <Square size={20} />
-                        Stop
+        <div className="audio-recorder-container" style={{ position: 'relative', zIndex: 60 }}>
+            {/* Error Toast */}
+            {error && (
+                <div className="error-toast" style={{
+                    position: 'fixed',
+                    bottom: '100px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(220, 38, 38, 0.95)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(248, 113, 113, 0.3)',
+                    borderRadius: '12px',
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    maxWidth: '90vw',
+                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.4)',
+                    animation: 'slideUp 0.3s ease-out'
+                }}>
+                    <AlertCircle size={20} style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.95rem', flex: 1 }}>{error}</span>
+                    <button
+                        onClick={dismissError}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            opacity: 0.7,
+                            transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                    >
+                        <X size={18} />
                     </button>
-                    <button className="glass-button" onClick={togglePause}>
-                        {isPaused ? <Play size={20} /> : <Pause size={20} />}
-                        {isPaused ? "Resume" : "Pause"}
-                    </button>
-                </>
+                </div>
             )}
+
+            {/* Recording Controls */}
+            <div className="flex gap-4 justify-center">
+                {!isRecording ? (
+                    <button className="glass-button" onClick={startRecording}>
+                        <Mic size={20} />
+                        Start Recording
+                    </button>
+                ) : (
+                    <>
+                        <button className="glass-button danger" onClick={stopRecording}>
+                            <Square size={20} />
+                            Stop
+                        </button>
+                        <button className="glass-button" onClick={togglePause}>
+                            {isPaused ? <Play size={20} /> : <Pause size={20} />}
+                            {isPaused ? "Resume" : "Pause"}
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 }
