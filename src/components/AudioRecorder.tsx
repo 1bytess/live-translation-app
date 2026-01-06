@@ -20,7 +20,7 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
     const streamRef = useRef<MediaStream | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
 
-    const CHUNK_INTERVAL = 10000; // 10 seconds for "live" feel
+    const CHUNK_INTERVAL = 5000; // 5 seconds for faster live transcription
 
     // Check API key on mount
     useEffect(() => {
