@@ -2,8 +2,16 @@ import OpenAI from 'openai';
 
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
+// Export function to check if API key is configured
+export function isApiKeyConfigured(): boolean {
+    return !!apiKey && apiKey !== 'dummy' && apiKey.length > 10;
+}
+
 if (!apiKey) {
-    console.warn("OpenAI API Key is missing. Please set VITE_OPENAI_API_KEY in .env");
+    console.error("❌ VITE_OPENAI_API_KEY is missing! Transcription will not work.");
+    console.error("Please set the environment variable in Cloudflare Pages dashboard or .env file");
+} else {
+    console.log("✅ OpenAI API Key is configured (length:", apiKey.length, ")");
 }
 
 const client = new OpenAI({

@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, AlertCircle, X } from 'lucide-react';
-import { transcribeAudio, correctTranscript, translateText } from '../services/openai';
+import { transcribeAudio, correctTranscript, translateText, isApiKeyConfigured } from '../services/openai';
 
 interface AudioRecorderProps {
     language: string;
@@ -13,6 +13,8 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+    const [apiKeyMissing, setApiKeyMissing] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
     const streamRef = useRef<MediaStream | null>(null);
@@ -20,10 +22,25 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
 
     const CHUNK_INTERVAL = 10000; // 10 seconds for "live" feel
 
+    // Check API key on mount
+    useEffect(() => {
+        if (!isApiKeyConfigured()) {
+            setApiKeyMissing(true);
+            console.error("API key check failed - transcription will not work");
+        }
+    }, []);
+
     const dismissError = () => setError(null);
 
     const startRecording = async () => {
         setError(null);
+
+        // Warn if API key is missing
+        if (apiKeyMissing) {
+            setError("OpenAI API key is not configured. Transcription will not work.");
+            return;
+        }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -78,22 +95,44 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
     const processChunk = async (chunk: Blob) => {
         // Create a file from the chunk
         const file = new File([chunk], "speech.webm", { type: 'audio/webm' });
+        console.log("🎤 Processing audio chunk:", file.size, "bytes");
+        setProcessingStatus("Transcribing...");
 
         try {
             // 1. Transcribe
+            console.log("📝 Calling transcribeAudio...");
             const transcript = await transcribeAudio(file, language);
-            if (!transcript || typeof transcript !== 'string' || transcript.trim().length === 0) return;
+            console.log("📝 Transcription result:", transcript);
+
+            if (!transcript || typeof transcript !== 'string' || transcript.trim().length === 0) {
+                console.log("⚠️ Empty transcription, skipping");
+                setProcessingStatus(null);
+                return;
+            }
 
             // 2. Correct
+            setProcessingStatus("Correcting...");
+            console.log("✏️ Calling correctTranscript...");
             const corrected = await correctTranscript(transcript);
+            console.log("✏️ Corrected result:", corrected);
 
             // 3. Translate
+            setProcessingStatus("Translating...");
+            console.log("🌐 Calling translateText...");
             const translation = await translateText(corrected);
+            console.log("🌐 Translation result:", translation);
 
+            setProcessingStatus(null);
             onNewTranscript(corrected, translation);
 
-        } catch (error) {
-            console.error("Processing chunk failed:", error);
+        } catch (error: any) {
+            console.error("❌ Processing chunk failed:", error);
+            setProcessingStatus(null);
+
+            // Show error to user if it's an API error
+            if (error.message?.includes('API') || error.message?.includes('401') || error.message?.includes('403')) {
+                setError("OpenAI API error. Please check your API key configuration.");
+            }
         }
     };
 
@@ -169,6 +208,53 @@ export default function AudioRecorder({ language, onNewTranscript, onAnalyserRea
                     >
                         <X size={18} />
                     </button>
+                </div>
+            )}
+
+            {/* Processing Status Indicator */}
+            {processingStatus && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    background: 'rgba(139, 92, 246, 0.9)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '8px',
+                    padding: '10px 16px',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 20px rgba(139, 92, 246, 0.3)'
+                }}>
+                    <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#fff',
+                        animation: 'blink 1s infinite'
+                    }} />
+                    {processingStatus}
+                </div>
+            )}
+
+            {/* API Key Warning */}
+            {apiKeyMissing && !error && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(245, 158, 11, 0.95)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '8px',
+                    padding: '10px 16px',
+                    fontSize: '0.85rem',
+                    color: '#000',
+                    fontWeight: 500,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+                }}>
+                    ⚠️ OpenAI API key not configured - Transcription disabled
                 </div>
             )}
 
