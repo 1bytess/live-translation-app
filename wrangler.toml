@@ -1,3 +1,9 @@
-name = "transcript-project"
+name = "live-translation-app"
 pages_build_output_dir = "dist"
 compatibility_date = "2024-01-01"
+
+# Environment variables for the build
+# Note: The actual VITE_OPENAI_API_KEY value should be set in
+# Cloudflare Pages Dashboard > Settings > Environment variables
+[vars]
+# Placeholder - actual value comes from Cloudflare dashboard secrets
